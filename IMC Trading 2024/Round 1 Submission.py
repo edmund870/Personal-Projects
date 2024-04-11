@@ -111,42 +111,12 @@ class Trader:
     ask_cache = copy.deepcopy(empty_dict_cache)
     mid_cache = copy.deepcopy(empty_dict_cache)
     skew_cache = copy.deepcopy(empty_dict_cache)
-
-    def values_extract(self, order_dict, buy=0):
-        tot_vol = 0
-        best_val = -1
-        mxvol = -1
-
-        for ask, vol in order_dict.items():
-            if (buy == 0):
-                vol *= -1
-            tot_vol += vol
-            if tot_vol > mxvol:
-                mxvol = vol
-                best_val = ask
-        
-        return tot_vol, best_val
     
-    def values_extract_depth(self, order_dict):
-
-      price = np.array([])
-      vol = np.array([])
-
-      for i, j in order_dict.items():
-          price = np.append(price, abs(i))
-          vol = np.append(vol, abs(j))
-      
-      return price, vol
-    
-    def replace_outlier(self, mid):
-        median = np.median(mid)
-        quartile_1, quartile_3 = np.percentile(mid, [25, 75])
-        iqr = quartile_3 - quartile_1
-        lower_bound = median - iqr
-        upper_bound = median + iqr
-        return np.where((mid < lower_bound) | (mid > upper_bound), median, mid)
-
-    def AMETHYSTS_bs(self, best_bid, best_ask):
+    def AMETHYSTS_bs(
+          self, 
+          best_bid: int, 
+          best_ask: int
+          ) -> str:
         
         if best_ask <= 10000:       
             return 'buy'
@@ -155,7 +125,12 @@ class Trader:
         else:
             return 'MM'
         
-    def STARFRUIT_bs(self, best_bid, best_ask, mid_price_cache):
+    def STARFRUIT_bs(
+          self, 
+          best_bid: int, 
+          best_ask: int, 
+          mid_price_cache: list[float]
+          ) -> str:
 
         product = 'STARFRUIT'
         mid_prices = mid_price_cache[product]
@@ -199,7 +174,7 @@ class Trader:
 
           
           ###############################
-          ## strategy engineering here ##
+          ##### Feature Engineering #####
           ###############################
           price_spread = best_ask - best_bid
         
@@ -209,64 +184,58 @@ class Trader:
           # skew info
           skew = np.log(best_ask) - np.log(best_bid) * 100
 
-          ################
-          ## Conditions ##
-          ################
+          ##################
+          ## Order Engine ##
+          ##################
 
           curr_pos = self.position[product]
           pos_limit = self.POSITION_LIMIT[product]
-          weight = 1
+          weight = 0.95
 
           if product == 'STARFRUIT':
               cond = self.STARFRUIT_bs(best_bid, best_ask, self.mid_cache)
-              buy_price, sell_price = best_ask, best_bid
+              if cond == 'buy':
+                buy_price, sell_price = best_ask, best_bid + 1
+              if cond == 'sell':
+                buy_price, sell_price = best_bid, best_ask - 1
               if cond == 'MM':
                   buy_price, sell_price = best_bid + 1, best_ask - 1 
 
           if product == 'AMETHYSTS':
               cond = self.AMETHYSTS_bs(best_bid, best_ask)
-              buy_price, sell_price = best_ask, best_bid
+              if cond == 'buy':
+                buy_price, sell_price = best_ask, max(9998, best_bid + 1)
+              if cond == 'sell':
+                buy_price, sell_price = best_bid, min(10002, best_ask - 1)
               if cond == 'MM':
                 buy_price, sell_price = best_bid + 1, best_ask - 1  # i quote the bid, CP wants to sell at bid, i am long
 
           logger.print(product, 'current pos', curr_pos)
 
           buy_amount = min(pos_limit, min(best_bid_amount, pos_limit - curr_pos))
-          sell_amount = min(pos_limit, abs(min(abs(best_ask_amount), -pos_limit - curr_pos)))
-
-              
+          sell_amount = min(pos_limit, abs(min(abs(best_ask_amount), -pos_limit - curr_pos)))   
    
-            ### BUY ### 
+          ### BUY ### 
           if cond == 'buy':
-            curr_buy_amount = math.ceil(buy_amount * weight)
+            curr_buy_amount = math.ceil((buy_amount * weight) / 2)
             curr_sell_amount = -math.floor(buy_amount * (1 - weight)) if abs(-math.floor(buy_amount * (1 - weight)) + curr_pos ) <= pos_limit else 0
 
-            orders.append(Order(product, buy_price, curr_buy_amount))
-            orders.append(Order(product, sell_price, curr_sell_amount))
-            logger.print('BUYYYY')
-            logger.print(f'buying {curr_buy_amount} {product} @ {best_ask+1}')
-            logger.print(f'selling {curr_sell_amount} {product} @ {best_ask+2}')
-                
+            orders.append(Order(product, buy_price, curr_buy_amount)) # fill ask
+            orders.append(Order(product, sell_price, curr_buy_amount)) # quote bid
+            orders.append(Order(product, buy_price, curr_sell_amount + 1)) # quote ask
 
-            ### SELL ###
+          ### SELL ###
           if cond == 'sell':
-            curr_sell_amount = -math.ceil(sell_amount * weight)
+            curr_sell_amount = -math.ceil((sell_amount * weight) / 2)
             curr_buy_amount = math.floor(sell_amount * (1 - weight)) if abs(math.floor(sell_amount * (1 - weight)) + curr_pos ) <= pos_limit else 0
 
-            orders.append(Order(product, sell_price, curr_sell_amount))
-            orders.append(Order(product, buy_price, curr_buy_amount))
-            logger.print('SELLLLL')
-            logger.print(f'selling {curr_sell_amount} {product} @ {best_bid-1}')
-            logger.print(f'buying {curr_buy_amount} {product} @ {best_bid-2}')
+            orders.append(Order(product, sell_price, curr_sell_amount)) # fill bid
+            orders.append(Order(product, buy_price, curr_sell_amount)) # quote bid
+            orders.append(Order(product, sell_price, curr_buy_amount - 1)) # quote ask
 
           if cond == 'MM':
             orders.append(Order(product, sell_price, -sell_amount))
-            orders.append(Order(product, buy_price, buy_amount))
-            logger.print('MM')
-            logger.print(f'quoting bid {buy_price}{product} {buy_amount}')
-            logger.print(f'quoting ask {sell_price} {product} {-sell_amount}')
-
-              
+            orders.append(Order(product, buy_price, buy_amount))          
 
           window = 10
           caches = [self.spread_cache, self.ask_cache, self.bid_cache, self.mid_cache, self.skew_cache]
