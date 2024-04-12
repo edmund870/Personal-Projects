@@ -196,8 +196,10 @@ class Trader:
               cond = self.STARFRUIT_bs(best_bid, best_ask, self.mid_cache)
               if cond == 'buy':
                 buy_price, sell_price = best_ask, best_bid + 1
+                mm_buy_price, mm_sell_price = best_bid + 1, best_ask
               if cond == 'sell':
                 buy_price, sell_price = best_bid, best_ask - 1
+                mm_buy_price, mm_sell_price = best_bid, best_ask - 1
               if cond == 'MM':
                   buy_price, sell_price = best_bid + 1, best_ask - 1 
 
@@ -205,8 +207,10 @@ class Trader:
               cond = self.AMETHYSTS_bs(best_bid, best_ask)
               if cond == 'buy':
                 buy_price, sell_price = best_ask, max(9998, best_bid + 1)
+                mm_buy_price, mm_sell_price = max(9998, best_bid + 1), best_ask
               if cond == 'sell':
-                buy_price, sell_price = best_bid, min(10002, best_ask - 1)
+                buy_price, sell_price = min(10002, best_ask - 1), best_bid
+                mm_buy_price, mm_sell_price = best_bid, min(10002, best_ask - 1)
               if cond == 'MM':
                 buy_price, sell_price = best_bid + 1, best_ask - 1  # i quote the bid, CP wants to sell at bid, i am long
 
@@ -221,8 +225,8 @@ class Trader:
             curr_sell_amount = -math.floor(buy_amount * (1 - weight)) if abs(-math.floor(buy_amount * (1 - weight)) + curr_pos ) <= pos_limit else 0
 
             orders.append(Order(product, buy_price, curr_buy_amount)) # fill ask
-            orders.append(Order(product, sell_price, curr_buy_amount)) # quote bid
-            orders.append(Order(product, buy_price, curr_sell_amount + 1)) # quote ask
+            orders.append(Order(product, mm_buy_price, curr_buy_amount)) # quote bid
+            orders.append(Order(product, mm_sell_price, curr_sell_amount + 1)) # quote ask
 
           ### SELL ###
           if cond == 'sell':
@@ -230,8 +234,8 @@ class Trader:
             curr_buy_amount = math.floor(sell_amount * (1 - weight)) if abs(math.floor(sell_amount * (1 - weight)) + curr_pos ) <= pos_limit else 0
 
             orders.append(Order(product, sell_price, curr_sell_amount)) # fill bid
-            orders.append(Order(product, buy_price, curr_sell_amount)) # quote bid
-            orders.append(Order(product, sell_price, curr_buy_amount - 1)) # quote ask
+            orders.append(Order(product, mm_buy_price, curr_buy_amount - 1)) # quote bid
+            orders.append(Order(product, mm_sell_price, curr_sell_amount)) # quote ask
 
           if cond == 'MM':
             orders.append(Order(product, sell_price, -sell_amount))
