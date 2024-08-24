@@ -5,4 +5,5 @@ Logging my personal projects
 ~ Moo Moo Automated Trading \
 ~ Estimating π \
 ~ Options: Trading Gamma \
-~ CMFAS Module 3 Rules & Regulations for Fund Management
+~ CMFAS Module 3 Rules & Regulations for Fund Management \ 
+~ Liquidation Profile
